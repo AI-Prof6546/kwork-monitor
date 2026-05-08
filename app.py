@@ -14,26 +14,9 @@ st.set_page_config(
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
-    
     .stApp { background: linear-gradient(135deg, #0a0c14 0%, #0e1117 100%); font-family: 'Inter', sans-serif; }
-    
-    .main-header {
-        background: linear-gradient(90deg, #1a1f2e 0%, #252b3d 100%);
-        padding: 24px 32px;
-        border-radius: 20px;
-        margin-bottom: 24px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-        border: 1px solid #2a3142;
-    }
-    
-    .metric-card {
-        background: #1a1f2e;
-        border-radius: 16px;
-        padding: 20px 24px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.35);
-        border: 1px solid #2a3142;
-    }
-    
+    .main-header { background: linear-gradient(90deg, #1a1f2e 0%, #252b3d 100%); padding: 24px 32px; border-radius: 20px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid #2a3142; }
+    .metric-card { background: #1a1f2e; border-radius: 16px; padding: 20px 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.35); border: 1px solid #2a3142; }
     .stDataFrame { border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); border: 1px solid #2a3142; }
 </style>
 """, unsafe_allow_html=True)
@@ -64,21 +47,44 @@ def load_data():
 
 df = load_data()
 
-# ==================== МЕТРИКИ ====================
-col1, col2, col3, col4 = st.columns(4)
+# ==================== БЕЗОПАСНЫЕ МЕТРИКИ ====================
+def safe_count(col, pattern):
+    if df.empty or col not in df.columns:
+        return 0
+    try:
+        return len(df[df[col].astype(str).str.contains(pattern, na=False)])
+    except:
+        return 0
 
 total = len(df)
-high_priority = len(df[df.get("Приоритет", "").astype(str).str.contains("💎", na=False)]) if not df.empty else 0
-today_count = len(df[df.get("Дата", "").astype(str).str.contains(str(date.today()), na=False)]) if not df.empty else 0
+high_priority = safe_count("Приоритет", "💎")
+today_count = safe_count("Дата", str(date.today()))
 
-col1.metric("📦 Всего заказов", total)
-col2.metric("💎 Высокий приоритет", high_priority)
-col3.metric("📅 Сегодня", today_count)
-col4.metric("📥 Загружено строк", len(df))
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.metric("📦 Всего заказов", total)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with col2:
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.metric("💎 Высокий приоритет", high_priority)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with col3:
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.metric("📅 Сегодня", today_count)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with col4:
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.metric("📥 Загружено строк", total)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
-# ==================== ГЛАВНАЯ ТАБЛИЦА (всегда видна) ====================
+# ==================== ГЛАВНАЯ ТАБЛИЦА ====================
 st.subheader("📋 Все заказы")
 if df.empty:
     st.info("📭 Пока нет заказов. Первые данные появятся в течение 1–2 минут.")
@@ -99,12 +105,9 @@ st.divider()
 
 # ==================== ВКЛАДКИ ====================
 st.subheader("📂 Заказы по направлениям")
-tabs = st.tabs([
-    "🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop/Видео монтаж",
-    "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие заказы"
-])
+tabs = st.tabs(["🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop/Видео монтаж", "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие заказы"])
 
-def show_tab(df, keyword):
+def show_tab(keyword):
     if df.empty:
         st.info("Нет данных")
         return
@@ -124,13 +127,13 @@ def show_tab(df, keyword):
             hide_index=True
         )
 
-with tabs[0]: show_tab(df, "Figma")
-with tabs[1]: show_tab(df, "Фото/Видео ИИ")
-with tabs[2]: show_tab(df, "Photoshop|Видео монтаж")
-with tabs[3]: show_tab(df, "Excel/PDF")
-with tabs[4]: show_tab(df, "WB/OZON")
-with tabs[5]: show_tab(df, "Grok 4.3")
-with tabs[6]: show_tab(df, "Другие заказы")
+with tabs[0]: show_tab("Figma")
+with tabs[1]: show_tab("Фото/Видео ИИ")
+with tabs[2]: show_tab("Photoshop|Видео монтаж")
+with tabs[3]: show_tab("Excel/PDF")
+with tabs[4]: show_tab("WB/OZON")
+with tabs[5]: show_tab("Grok 4.3")
+with tabs[6]: show_tab("Другие заказы")
 
 # Автообновление
 time.sleep(0.5)
