@@ -1,102 +1,99 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import time
 
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStd09qZjRsRPMB_mN0HgEB6dDL2UPAELc59_IxnFroSvWgR984VUcvzm3zn8dyhsP7Q5hk1iq9WXDS/pub?output=csv"
-
-st.set_page_config(page_title="Kwork Монитор", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="Kwork Монитор ИИ-заказов", layout="wide")
 
 st.title("🤖 Kwork Монитор ИИ-заказов")
-st.caption("⚡ Реальное время • Обновление каждые 2 секунды")
+st.caption("🔥 Реальное время • Обновление каждые 2 секунды")
+
+# ===================== НАСТРОЙКИ =====================
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStd09qZjRsRPMB_mN0HgEB6dDL2UPAELc59_IxnFroSvWgR984VUcvzm3zn8dyhsP7Q5hk1iq9WXDS/pub?output=csv"
 
 @st.cache_data(ttl=2)
 def load_orders():
-    df = pd.read_csv(CSV_URL, on_bad_lines='skip')
-    df.columns = df.columns.str.strip()
-    if "Дата" in df.columns:
-        df["Дата"] = pd.to_datetime(df["Дата"], errors='coerce')
-    return df
+    try:
+        df = pd.read_csv(CSV_URL, on_bad_lines='skip')
+        # Приводим названия колонок к нормальному виду
+        df.columns = df.columns.str.strip()
+        return df
+    except:
+        # Если таблица пустая или ошибка — возвращаем пустой DataFrame
+        return pd.DataFrame(columns=["Дата", "Приоритет", "Категория", "Заголовок", "Бюджет", "Предложений", "Описание", "Ссылка"])
 
 df = load_orders()
 
-st.success(f"✅ Загружено строк из Google: {len(df)}")
-
-# Метрики
+# ===================== МЕТРИКИ =====================
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Всего заказов", len(df))
-col2.metric("Высокий приоритет", len(df[df.get("Приоритет", "").str.contains("💎", na=False)]))
-col3.metric("Сегодня", len(df[df["Дата"].dt.date == datetime.now().date()]) if "Дата" in df.columns else 0)
 
-st.subheader("📋 Все заказы")
+total = len(df)
+high_priority = len(df[df.get("Приоритет", pd.Series()).astype(str).str.contains("💎", na=False)])
+today = len(df[df.get("Дата", pd.Series()).astype(str).str.contains(str(datetime.now().date()), na=False)])
 
-search = st.text_input("🔍 Поиск", "")
-priority_filter = st.selectbox("Приоритет", ["Все", "💎 Высокий", "📌 Обычный"])
+col1.metric("Всего заказов", total)
+col2.metric("Высокий приоритет", high_priority)
+col3.metric("Сегодня", today)
+col4.metric("Загружено строк из Google", len(df))
 
-filtered = df.copy()
-if search:
-    filtered = filtered[
-        filtered.get("Заголовок", "").str.contains(search, case=False, na=False) |
-        filtered.get("Описание", "").str.contains(search, case=False, na=False)
-    ]
-if priority_filter != "Все":
-    filtered = filtered[filtered.get("Приоритет", "").str.contains(priority_filter[0], na=False)]
+st.divider()
 
-# ИСПРАВЛЕНИЕ: делаем ссылки кликабельными
-st.dataframe(
-    filtered.style.apply(
-        lambda row: ['background-color: #1a3c2e' if '💎' in str(row.get("Приоритет","")) else 'background-color: #1a2a3c'] * len(row),
-        axis=1
-    ),
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "Дата": st.column_config.DatetimeColumn(format="DD.MM HH:mm", width=110),
-        "Приоритет": st.column_config.TextColumn(width=140),
-        "Категория": st.column_config.TextColumn(width=160),
-        "Заголовок": st.column_config.TextColumn(width=320),
-        "Бюджет": st.column_config.TextColumn(width=110),
-        "Предложений": st.column_config.NumberColumn(width=100),
-        "Описание": st.column_config.TextColumn(width=500),
-        # Главное исправление — ссылки
+# ===================== ВКЛАДКИ =====================
+tab_all, tab_figma, tab_ai, tab_photo, tab_excel, tab_wb, tab_grok, tab_other = st.tabs([
+    "📋 Все заказы", "🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop/Видео монтаж",
+    "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие заказы"
+])
+
+def show_table(filtered_df):
+    if filtered_df.empty:
+        st.info("Пока нет заказов в этой категории")
+        return
+    
+    # Делаем ссылки кликабельными
+    column_config = {
         "Ссылка": st.column_config.LinkColumn("Открыть заказ", display_text="🔗 Открыть", width=130),
-        # Если столбец называется по-другому — добавляем резерв
-        "ССЫЛКА": st.column_config.LinkColumn("Открыть заказ", display_text="🔗 Открыть", width=130),
-        "Column 1": st.column_config.LinkColumn("Открыть заказ", display_text="🔗 Открыть", width=130),
+        "Заголовок": st.column_config.TextColumn("Заголовок", width=400),
+        "Описание": st.column_config.TextColumn("Описание", width=500),
     }
-)
+    
+    st.dataframe(
+        filtered_df,
+        use_container_width=True,
+        column_config=column_config,
+        hide_index=True
+    )
 
-st.success(f"⚡ Обновлено: {datetime.now().strftime('%H:%M:%S')}")
+# Все заказы
+with tab_all:
+    show_table(df)
 
-# Вкладки (аналогично)
-st.subheader("📂 Заказы по направлениям")
-tabs = st.tabs(["Figma", "Фото/Видео ИИ", "Photoshop/Видео монтаж", "Excel/PDF", "WB/OZON", "Grok 4.3", "Другие заказы"])
+# Figma
+with tab_figma:
+    show_table(df[df.get("Категория", "").str.contains("Figma", na=False)])
 
-for tab, cat in zip(tabs, ["Figma", "Фото/Видео ИИ", "Photoshop/Видео монтаж", "Excel/PDF", "WB/OZON", "Grok 4.3", "Другие заказы"]):
-    with tab:
-        df_cat = df[df.get("Категория", "") == cat].copy()
-        if df_cat.empty:
-            st.info(f"Пока нет заказов в категории «{cat}»")
-        else:
-            st.dataframe(
-                df_cat.style.apply(
-                    lambda row: ['background-color: #1a3c2e' if '💎' in str(row.get("Приоритет","")) else 'background-color: #1a2a3c'] * len(row),
-                    axis=1
-                ),
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Дата": st.column_config.DatetimeColumn(format="DD.MM HH:mm", width=110),
-                    "Приоритет": st.column_config.TextColumn(width=140),
-                    "Заголовок": st.column_config.TextColumn(width=320),
-                    "Бюджет": st.column_config.TextColumn(width=110),
-                    "Предложений": st.column_config.NumberColumn(width=100),
-                    "Описание": st.column_config.TextColumn(width=500),
-                    "Ссылка": st.column_config.LinkColumn("Открыть заказ", display_text="🔗 Открыть", width=130),
-                    "ССЫЛКА": st.column_config.LinkColumn("Открыть заказ", display_text="🔗 Открыть", width=130),
-                    "Column 1": st.column_config.LinkColumn("Открыть заказ", display_text="🔗 Открыть", width=130),
-                }
-            )
+# Фото/Видео ИИ
+with tab_ai:
+    show_table(df[df.get("Категория", "").str.contains("Фото/Видео ИИ", na=False)])
 
+# Photoshop/Видео монтаж
+with tab_photo:
+    show_table(df[df.get("Категория", "").str.contains("Photoshop|Видео монтаж", na=False, regex=True)])
+
+# Excel/PDF
+with tab_excel:
+    show_table(df[df.get("Категория", "").str.contains("Excel/PDF", na=False)])
+
+# WB/OZON
+with tab_wb:
+    show_table(df[df.get("Категория", "").str.contains("WB/OZON", na=False)])
+
+# Grok 4.3
+with tab_grok:
+    show_table(df[df.get("Категория", "").str.contains("Grok 4.3", na=False)])
+
+# Другие
+with tab_other:
+    show_table(df[df.get("Категория", "").str.contains("Другие заказы", na=False)])
+
+# Автообновление
 time.sleep(0.5)
 st.rerun()
