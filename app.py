@@ -40,20 +40,13 @@ def load_data():
 
 df = load_data()
 
-# ==================== БЕЗОПАСНЫЕ МЕТРИКИ ====================
-def safe_count(col, pattern):
-    if df.empty or col not in df.columns:
-        return 0
-    try:
-        return len(df[df[col].astype(str).str.contains(pattern, na=False)])
-    except:
-        return 0
+# ==================== МЕТРИКИ ====================
+col1, col2, col3, col4 = st.columns(4)
 
 total = len(df)
-high_priority = safe_count("Приоритет", "💎")
-today_count = safe_count("Дата", str(date.today()))
+high_priority = len(df[df.get("Приоритет", "").astype(str).str.contains("💎", na=False)]) if not df.empty else 0
+today_count = len(df[df.get("Дата", "").astype(str).str.contains(str(date.today()), na=False)]) if not df.empty else 0
 
-col1, col2, col3, col4 = st.columns(4)
 col1.metric("📦 Всего заказов", total)
 col2.metric("💎 Высокий приоритет", high_priority)
 col3.metric("📅 Сегодня", today_count)
@@ -61,13 +54,12 @@ col4.metric("📥 Загружено строк", len(df))
 
 st.divider()
 
-# ==================== ГЛАВНАЯ ТАБЛИЦА (новые сверху) ====================
+# ==================== ГЛАВНАЯ ТАБЛИЦА ====================
 st.subheader("📋 Все заказы")
 
 if df.empty:
     st.info("📭 Пока нет заказов. Первые данные появятся в течение 1–2 минут.")
 else:
-    # Новые заказы сверху
     if "Дата" in df.columns:
         df = df.copy()
         df["Дата"] = pd.to_datetime(df["Дата"], errors="coerce")
@@ -87,20 +79,24 @@ else:
 
 st.divider()
 
-# ==================== ВКЛАДКИ (максимально защищённые) ====================
+# ==================== ВКЛАДКИ (исправленная фильтрация) ====================
 st.subheader("📂 Заказы по направлениям")
 tabs = st.tabs([
     "🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop/Видео монтаж",
     "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие заказы"
 ])
 
-def show_tab(keyword):
+def show_tab(keyword, friendly_name):
     if df.empty or "Категория" not in df.columns:
         st.info("Нет данных")
         return
-    filtered = df[df["Категория"].astype(str).str.contains(keyword, na=False)]
+    
+    # Улучшенная фильтрация
+    mask = df["Категория"].astype(str).str.contains(keyword, case=False, na=False)
+    filtered = df[mask]
+    
     if filtered.empty:
-        st.info(f"Пока нет заказов в категории «{keyword}»")
+        st.info(f"Пока нет заказов в категории «{friendly_name}»")
     else:
         st.dataframe(
             filtered,
@@ -114,13 +110,13 @@ def show_tab(keyword):
             hide_index=True
         )
 
-with tabs[0]: show_tab("Figma")
-with tabs[1]: show_tab("Фото/Видео ИИ")
-with tabs[2]: show_tab("Photoshop|Видео монтаж")
-with tabs[3]: show_tab("Excel/PDF")
-with tabs[4]: show_tab("WB/OZON")
-with tabs[5]: show_tab("Grok 4.3")
-with tabs[6]: show_tab("Другие заказы")
+with tabs[0]: show_tab("Figma", "Figma")
+with tabs[1]: show_tab("Фото/Видео ИИ", "Фото/Видео ИИ")
+with tabs[2]: show_tab("Photoshop|Видео монтаж", "Photoshop/Видео монтаж")
+with tabs[3]: show_tab("Excel/PDF", "Excel/PDF")
+with tabs[4]: show_tab("WB/OZON", "WB/OZON")
+with tabs[5]: show_tab("Grok 4.3|Grok", "Grok 4.3")      # ← исправлено специально для Grok
+with tabs[6]: show_tab("Другие заказы", "Другие заказы")
 
 # Автообновление
 time.sleep(0.5)
