@@ -38,114 +38,113 @@ CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStd09qZjRsRPMB_mN0Hg
 @st.cache_data(ttl=2, show_spinner=False)
 def load_data():
     try:
-        # Читаем БЕЗ заголовков (самый надёжный способ)
         df = pd.read_csv(CSV_URL, on_bad_lines='skip', header=None)
         
         if df.empty:
             return pd.DataFrame(columns=['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'])
         
-        # Принудительно ставим правильные названия колонок (по позиции из твоей таблицы)
+        # Принудительно назначаем колонки по позиции (самый надёжный способ)
         if len(df.columns) >= 8:
             df.columns = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка']
         else:
-            # Если колонок меньше — дополняем
             while len(df.columns) < 8:
                 df[len(df.columns)] = ""
             df.columns = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'][:len(df.columns)]
         
-        # Убираем возможную строку заголовков, если она попала в данные
-        if str(df.iloc[0]['Дата']).lower() in ['дата', 'date', 'время']:
+        # Убираем строку заголовков, если она попала
+        if str(df.iloc[0, 0]).lower() in ['дата', 'date', 'время']:
             df = df.iloc[1:].reset_index(drop=True)
         
-        # Очистка
         df['Дата'] = pd.to_datetime(df['Дата'], errors='coerce')
         df = df.dropna(subset=['Заголовок'])
         df = df[df['Заголовок'].astype(str).str.strip() != ""]
         df = df.sort_values('Дата', ascending=False).reset_index(drop=True)
         
         return df
-    except Exception as e:
-        st.warning(f"⚠️ Ошибка загрузки данных: {str(e)[:200]}")
+    except Exception:
         return pd.DataFrame(columns=['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'])
 
-df = load_data()
+# ==================== ОСНОВНОЙ ФРАГМЕНТ (БЕЗ st.rerun — ТОЛЬКО fragment) ====================
+@st.fragment(run_every=2)
+def show_dashboard():
+    df = load_data()
+    
+    # Метрики
+    total = len(df)
+    high_priority = len(df[df['Приоритет'].astype(str).str.contains('💎|ВЫСОКИЙ', case=False, na=False)]) if not df.empty else 0
+    today_count = len(df[df['Дата'].dt.date == date.today()]) if not df.empty else 0
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("📦 Всего заказов", total)
+    col2.metric("💎 Высокий приоритет", high_priority)
+    col3.metric("📅 Сегодня", today_count)
+    col4.metric("📥 Загружено строк", total)
+    
+    st.divider()
+    
+    # Главная таблица
+    st.subheader("📋 Все заказы (новые сверху)")
+    
+    if df.empty:
+        st.info("📭 Пока нет заказов. Первые данные появятся в течение 1–2 минут.")
+    else:
+        st.dataframe(
+            df,
+            use_container_width=True,
+            height=520,
+            column_config={
+                "Дата": st.column_config.DatetimeColumn("Дата", format="DD.MM.YY HH:mm"),
+                "Заголовок": st.column_config.TextColumn(width=420),
+                "Описание": st.column_config.TextColumn(width=580),
+                "Ссылка": st.column_config.LinkColumn("Действие", display_text="🔗 Открыть заказ", width=140),
+            },
+            hide_index=True
+        )
+    
+    st.divider()
+    
+    # Вкладки
+    st.subheader("📂 Заказы по направлениям")
+    
+    tab_names = ["🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop/Видео монтаж", "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие заказы"]
+    tabs = st.tabs(tab_names)
+    
+    def show_tab(tab_index, keywords):
+        with tabs[tab_index]:
+            if df.empty or "Категория" not in df.columns:
+                st.info("📭 Нет данных")
+                return
+            
+            if tab_index == 6:  # Другие
+                mask = ~df['Категория'].astype(str).str.contains("Figma|Фото|Видео|Photoshop|Excel|WB|OZON|Grok", case=False, na=False)
+            else:
+                mask = df['Категория'].astype(str).str.contains(keywords, case=False, na=False, regex=True)
+            
+            filtered = df[mask]
+            
+            if filtered.empty:
+                st.info("📭 Пока нет заказов в этой категории")
+            else:
+                st.dataframe(
+                    filtered,
+                    use_container_width=True,
+                    height=320,
+                    column_config={
+                        "Дата": st.column_config.DatetimeColumn("Дата", format="DD.MM HH:mm"),
+                        "Заголовок": st.column_config.TextColumn(width=400),
+                        "Описание": st.column_config.TextColumn(width=520),
+                        "Ссылка": st.column_config.LinkColumn("Действие", display_text="🔗 Открыть", width=120),
+                    },
+                    hide_index=True
+                )
+    
+    show_tab(0, "Figma")
+    show_tab(1, "Фото|Видео")
+    show_tab(2, "Photoshop|Видео монтаж")
+    show_tab(3, "Excel|PDF")
+    show_tab(4, "WB|OZON")
+    show_tab(5, "Grok")           # ловит Grok 4.3 и все вариации
+    show_tab(6, "")
 
-# ==================== МЕТРИКИ ====================
-total = len(df)
-high_priority = len(df[df['Приоритет'].astype(str).str.contains('💎|ВЫСОКИЙ', case=False, na=False)]) if not df.empty else 0
-today_count = len(df[df['Дата'].dt.date == date.today()]) if not df.empty and 'Дата' in df.columns else 0
-
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("📦 Всего заказов", total)
-col2.metric("💎 Высокий приоритет", high_priority)
-col3.metric("📅 Сегодня", today_count)
-col4.metric("📥 Загружено строк", total)
-
-st.divider()
-
-# ==================== ГЛАВНАЯ ТАБЛИЦА ====================
-st.subheader("📋 Все заказы (новые сверху)")
-
-if df.empty:
-    st.info("📭 Пока нет заказов. Первые данные появятся в течение 1–2 минут.")
-else:
-    st.dataframe(
-        df,
-        use_container_width=True,
-        height=520,
-        column_config={
-            "Дата": st.column_config.DatetimeColumn("Дата", format="DD.MM.YY HH:mm"),
-            "Заголовок": st.column_config.TextColumn(width=420),
-            "Описание": st.column_config.TextColumn(width=580),
-            "Ссылка": st.column_config.LinkColumn("Действие", display_text="🔗 Открыть заказ", width=140),
-        },
-        hide_index=True
-    )
-
-st.divider()
-
-# ==================== ВКЛАДКИ ====================
-st.subheader("📂 Заказы по направлениям")
-
-tab_names = ["🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop/Видео монтаж", "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие заказы"]
-tabs = st.tabs(tab_names)
-
-def show_tab(tab_index, keywords):
-    with tabs[tab_index]:
-        if df.empty or "Категория" not in df.columns:
-            st.info("📭 Нет данных")
-            return
-        
-        if tab_index == 6:  # Другие заказы
-            mask = ~df['Категория'].astype(str).str.contains("Figma|Фото|Видео|Photoshop|Excel|WB|OZON|Grok", case=False, na=False)
-        else:
-            mask = df['Категория'].astype(str).str.contains(keywords, case=False, na=False, regex=True)
-        
-        filtered = df[mask]
-        
-        if filtered.empty:
-            st.info("📭 Пока нет заказов в этой категории")
-        else:
-            st.dataframe(
-                filtered,
-                use_container_width=True,
-                height=320,
-                column_config={
-                    "Дата": st.column_config.DatetimeColumn("Дата", format="DD.MM HH:mm"),
-                    "Заголовок": st.column_config.TextColumn(width=400),
-                    "Описание": st.column_config.TextColumn(width=520),
-                    "Ссылка": st.column_config.LinkColumn("Действие", display_text="🔗 Открыть", width=120),
-                },
-                hide_index=True
-            )
-
-show_tab(0, "Figma")
-show_tab(1, "Фото|Видео")
-show_tab(2, "Photoshop|Видео монтаж")
-show_tab(3, "Excel|PDF")
-show_tab(4, "WB|OZON")
-show_tab(5, "Grok")           # ← ловит Grok 4.3, Grok и т.д.
-show_tab(6, "")
-
-time.sleep(0.8)
-st.rerun()
+# ==================== ЗАПУСК ====================
+show_dashboard()
