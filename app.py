@@ -3,6 +3,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import time
 
 st.set_page_config(page_title="Kwork Монитор ИИ-заказов", page_icon="🤖", layout="wide")
 
@@ -17,7 +18,7 @@ st.markdown("""
 <div class="main-header">
     <h1 style="margin:0; font-size:42px; font-weight:800; color:white;">🤖 Kwork Монитор ИИ-заказов</h1>
     <p style="margin:8px 0 0 0; font-size:18px; color:#00ff9d; font-weight:600;">
-        🔥 Реальное время • Обновление каждые 2 секунды
+        🔥 Реальное время • Обновление каждые 10 секунд
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -36,35 +37,19 @@ def load_data():
         client = get_gspread_client()
         sheet = client.open_by_key(SPREADSHEET_ID).sheet1
         data = sheet.get_all_values()
-
+        
         if len(data) < 2:
             return pd.DataFrame()
-
-        # Берём первую строку как заголовки
+        
         headers = [str(h).strip() for h in data[0]]
         df = pd.DataFrame(data[1:], columns=headers)
-
-        # Приводим названия колонок к нужному виду (если они отличаются)
-        col_map = {
-            'Дата': 'Дата',
-            'Приоритет': 'Приоритет',
-            'Категория': 'Категория',
-            'Заголовок': 'Заголовок',
-            'Бюджет': 'Бюджет',
-            'Предложений': 'Предложений',
-            'Описание': 'Описание',
-            'Ссылка': 'Ссылка'
-        }
         
-        df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
-
-        # Оставляем только нужные колонки
         needed = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка']
         for col in needed:
             if col not in df.columns:
                 df[col] = ""
-
         df = df[needed]
+        
         df['Дата'] = pd.to_datetime(df['Дата'], errors='coerce')
         df = df.dropna(subset=['Заголовок'])
         df = df[df['Заголовок'].astype(str).str.strip() != ""]
@@ -74,11 +59,11 @@ def load_data():
         st.error(f"Ошибка: {e}")
         return pd.DataFrame()
 
-@st.fragment(run_every=2)
+@st.fragment(run_every=10)   # ← изменил с 2 на 10 секунд (решает проблему квоты)
 def show_dashboard():
     df = load_data()
     
-    if 'last_df' not in st.session_state or len(df) > len(st.session_state.get('last_df', [])):
+    if 'last_df' not in st.session_state or len(df) >= len(st.session_state.get('last_df', pd.DataFrame())):
         st.session_state.last_df = df
     df = st.session_state.last_df
 
@@ -97,7 +82,7 @@ def show_dashboard():
 
     st.subheader("📋 Все заказы (новые сверху)")
     if df.empty:
-        st.info("📭 Данных пока нет. Проверь таблицу в Google Sheets.")
+        st.info("📭 Данных пока нет. Подожди 10–20 секунд...")
     else:
         st.dataframe(df, use_container_width=True, height=520, hide_index=True,
                      column_config={"Ссылка": st.column_config.LinkColumn("Действие", display_text="🔗 Открыть заказ")})
