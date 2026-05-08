@@ -87,7 +87,7 @@ else:
 
 st.divider()
 
-# ==================== ВКЛАДКИ ====================
+# ==================== ВКЛАДКИ (максимально защищённые) ====================
 st.subheader("📂 Заказы по направлениям")
 tabs = st.tabs([
     "🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop/Видео монтаж",
@@ -95,10 +95,10 @@ tabs = st.tabs([
 ])
 
 def show_tab(keyword):
-    if df.empty:
+    if df.empty or "Категория" not in df.columns:
         st.info("Нет данных")
         return
-    filtered = df[df.get("Категория", "").astype(str).str.contains(keyword, na=False)]
+    filtered = df[df["Категория"].astype(str).str.contains(keyword, na=False)]
     if filtered.empty:
         st.info(f"Пока нет заказов в категории «{keyword}»")
     else:
