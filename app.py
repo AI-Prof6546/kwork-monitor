@@ -6,10 +6,12 @@ from datetime import datetime
 
 st.set_page_config(page_title="Kwork Монитор ИИ-заказов", page_icon="🤖", layout="wide")
 
+# ==================== ПРЕМИУМ ТЁМНАЯ ТЕМА ====================
 st.markdown("""
 <style>
     .stApp { background: linear-gradient(135deg, #0a0c14 0%, #0e1117 100%); }
     .main-header { background: linear-gradient(90deg, #1a1f2e 0%, #252b3d 100%); padding: 24px 32px; border-radius: 20px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid #2a3142; }
+    .stDataFrame { border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); border: 1px solid #2a3142; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -17,7 +19,7 @@ st.markdown("""
 <div class="main-header">
     <h1 style="margin:0; font-size:42px; font-weight:800; color:white;">🤖 Kwork Монитор ИИ-заказов</h1>
     <p style="margin:8px 0 0 0; font-size:18px; color:#00ff9d; font-weight:600;">
-        🔥 Реальное время • Обновление каждые 10 секунд
+        🔥 Реальное время • Обновление каждые 5 секунд
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -40,7 +42,6 @@ def load_data():
         if len(data) < 2:
             return pd.DataFrame()
 
-        # Пропускаем первую строку, если она не заголовки
         if "Дата" not in str(data[0]):
             data = data[1:]
 
@@ -83,14 +84,32 @@ def show_dashboard():
     st.caption(f"Последнее обновление: {datetime.now().strftime('%H:%M:%S')}")
     st.divider()
 
+    # ==================== ГЛАВНАЯ ТАБЛИЦА ====================
     st.subheader("📋 Все заказы (новые сверху)")
     if df.empty:
-        st.info("📭 Данных пока нет. Подожди 10–20 секунд...")
+        st.info("📭 Данных пока нет...")
     else:
-        st.dataframe(df, use_container_width=True, height=520, hide_index=True,
-                     column_config={"Ссылка": st.column_config.LinkColumn("Действие", display_text="🔗 Открыть заказ")})
+        st.dataframe(
+            df,
+            use_container_width=True,
+            height=520,
+            hide_index=True,
+            column_config={
+                "Дата": st.column_config.DatetimeColumn("Дата", format="DD.MM HH:mm"),
+                "Заголовок": st.column_config.TextColumn(width=380),
+                "Описание": st.column_config.TextColumn(width=520),
+                "Ссылка": st.column_config.LinkColumn(
+                    "Действие",
+                    display_text="🔗 Открыть заказ",
+                    width=150,
+                    help="Нажми, чтобы открыть заказ на Kwork"
+                ),
+            }
+        )
 
     st.divider()
+
+    # ==================== ВКЛАДКИ ====================
     st.subheader("📂 Заказы по направлениям")
     tabs = st.tabs(["🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop", "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие"])
 
@@ -105,9 +124,22 @@ def show_dashboard():
                 mask = df['Категория'].astype(str).str.contains(kw, case=False, na=False, regex=True)
             filtered = df[mask]
             if filtered.empty:
-                st.info("Пока нет заказов")
+                st.info("Пока нет заказов в этой категории")
             else:
-                st.dataframe(filtered, use_container_width=True, height=320, hide_index=True)
+                st.dataframe(
+                    filtered,
+                    use_container_width=True,
+                    height=320,
+                    hide_index=True,
+                    column_config={
+                        "Ссылка": st.column_config.LinkColumn(
+                            "Действие",
+                            display_text="🔗 Открыть заказ",
+                            width=140,
+                            help="Открыть заказ"
+                        ),
+                    }
+                )
 
     show_tab(0, "Figma")
     show_tab(1, "Фото|Видео")
