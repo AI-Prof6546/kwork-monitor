@@ -14,27 +14,11 @@ st.set_page_config(
 st.markdown("""
 <style>
     .stApp { background: linear-gradient(135deg, #0a0c14 0%, #0e1117 100%); }
-    .main-header { 
-        background: linear-gradient(90deg, #1a1f2e 0%, #252b3d 100%); 
-        padding: 24px 32px; border-radius: 20px; margin-bottom: 24px; 
-        box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid #2a3142; 
-    }
-    .metric-card { 
-        background: #1a1f2e; border-radius: 16px; padding: 20px 24px; 
-        box-shadow: 0 4px 20px rgba(0,0,0,0.35); border: 1px solid #2a3142; 
-    }
-    .stDataFrame { 
-        border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); 
-        border: 1px solid #2a3142; 
-    }
-    .stTabs [data-baseweb="tab"] { 
-        background: #252b3d; border-radius: 12px; padding: 14px 24px; 
-        font-weight: 600; 
-    }
-    .stTabs [aria-selected="true"] { 
-        background: linear-gradient(90deg, #00ff9d 0%, #00cc7a 100%); 
-        color: #0a0c14 !important; font-weight: 700; 
-    }
+    .main-header { background: linear-gradient(90deg, #1a1f2e 0%, #252b3d 100%); padding: 24px 32px; border-radius: 20px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid #2a3142; }
+    .metric-card { background: #1a1f2e; border-radius: 16px; padding: 20px 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.35); border: 1px solid #2a3142; }
+    .stDataFrame { border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); border: 1px solid #2a3142; }
+    .stTabs [data-baseweb="tab"] { background: #252b3d; border-radius: 12px; padding: 14px 24px; font-weight: 600; }
+    .stTabs [aria-selected="true"] { background: linear-gradient(90deg, #00ff9d 0%, #00cc7a 100%); color: #0a0c14 !important; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -54,70 +38,48 @@ CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStd09qZjRsRPMB_mN0Hg
 @st.cache_data(ttl=2, show_spinner=False)
 def load_data():
     try:
-        df = pd.read_csv(CSV_URL, on_bad_lines='skip')
-        df.columns = df.columns.str.strip()
+        # Читаем БЕЗ заголовков (самый надёжный способ)
+        df = pd.read_csv(CSV_URL, on_bad_lines='skip', header=None)
         
-        # === УМНАЯ АВТОМАТИЧЕСКАЯ КОРРЕКТИРОВКА КОЛОНОК ===
-        col_map = {}
-        for col in df.columns:
-            c = col.lower()
-            if 'дата' in c or 'время' in c or 'time' in c:
-                col_map[col] = 'Дата'
-            elif 'приоритет' in c or 'priority' in c:
-                col_map[col] = 'Приоритет'
-            elif 'категория' in c or 'category' in c:
-                col_map[col] = 'Категория'
-            elif 'заголовок' in c or 'title' in c:
-                col_map[col] = 'Заголовок'
-            elif 'бюджет' in c or 'budget' in c:
-                col_map[col] = 'Бюджет'
-            elif 'предложен' in c or 'proposal' in c:
-                col_map[col] = 'Предложений'
-            elif 'описан' in c or 'description' in c:
-                col_map[col] = 'Описание'
-            elif 'ссылк' in c or 'url' in c or 'link' in c:
-                col_map[col] = 'Ссылка'
+        if df.empty:
+            return pd.DataFrame(columns=['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'])
         
-        df = df.rename(columns=col_map)
+        # Принудительно ставим правильные названия колонок (по позиции из твоей таблицы)
+        if len(df.columns) >= 8:
+            df.columns = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка']
+        else:
+            # Если колонок меньше — дополняем
+            while len(df.columns) < 8:
+                df[len(df.columns)] = ""
+            df.columns = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'][:len(df.columns)]
         
-        # Если колонок меньше 8 — добавляем недостающие
-        required = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка']
-        for col in required:
-            if col not in df.columns:
-                df[col] = ""
+        # Убираем возможную строку заголовков, если она попала в данные
+        if str(df.iloc[0]['Дата']).lower() in ['дата', 'date', 'время']:
+            df = df.iloc[1:].reset_index(drop=True)
         
-        df = df[required]  # оставляем только нужные колонки в правильном порядке
+        # Очистка
+        df['Дата'] = pd.to_datetime(df['Дата'], errors='coerce')
         df = df.dropna(subset=['Заголовок'])
         df = df[df['Заголовок'].astype(str).str.strip() != ""]
-        
-        # Преобразуем дату
-        df['Дата'] = pd.to_datetime(df['Дата'], errors='coerce')
-        df = df.sort_values(by='Дата', ascending=False).reset_index(drop=True)
+        df = df.sort_values('Дата', ascending=False).reset_index(drop=True)
         
         return df
-    except Exception:
+    except Exception as e:
+        st.warning(f"⚠️ Ошибка загрузки данных: {str(e)[:200]}")
         return pd.DataFrame(columns=['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'])
 
 df = load_data()
 
 # ==================== МЕТРИКИ ====================
-def safe_count(column, pattern):
-    if df.empty or column not in df.columns:
-        return 0
-    try:
-        return int(df[column].astype(str).str.contains(pattern, case=False, na=False).sum())
-    except:
-        return 0
-
 total = len(df)
-high_priority = safe_count("Приоритет", "💎|ВЫСОКИЙ")
-today_count = safe_count("Дата", str(date.today()))
+high_priority = len(df[df['Приоритет'].astype(str).str.contains('💎|ВЫСОКИЙ', case=False, na=False)]) if not df.empty else 0
+today_count = len(df[df['Дата'].dt.date == date.today()]) if not df.empty and 'Дата' in df.columns else 0
 
 col1, col2, col3, col4 = st.columns(4)
-with col1: st.metric("📦 Всего заказов", total)
-with col2: st.metric("💎 Высокий приоритет", high_priority)
-with col3: st.metric("📅 Сегодня", today_count)
-with col4: st.metric("📥 Загружено строк", total)
+col1.metric("📦 Всего заказов", total)
+col2.metric("💎 Высокий приоритет", high_priority)
+col3.metric("📅 Сегодня", today_count)
+col4.metric("📥 Загружено строк", total)
 
 st.divider()
 
@@ -142,14 +104,10 @@ else:
 
 st.divider()
 
-# ==================== ВКЛАДКИ (максимально стабильная фильтрация) ====================
+# ==================== ВКЛАДКИ ====================
 st.subheader("📂 Заказы по направлениям")
 
-tab_names = [
-    "🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop/Видео монтаж",
-    "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие заказы"
-]
-
+tab_names = ["🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop/Видео монтаж", "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие заказы"]
 tabs = st.tabs(tab_names)
 
 def show_tab(tab_index, keywords):
@@ -158,19 +116,15 @@ def show_tab(tab_index, keywords):
             st.info("📭 Нет данных")
             return
         
-        # === УМНАЯ ФИЛЬТРАЦИЯ (ловит все вариации) ===
         if tab_index == 6:  # Другие заказы
-            mask = ~df['Категория'].astype(str).str.contains(
-                "Figma|Фото|Видео|Photoshop|Excel|WB|OZON|Grok", case=False, na=False
-            )
+            mask = ~df['Категория'].astype(str).str.contains("Figma|Фото|Видео|Photoshop|Excel|WB|OZON|Grok", case=False, na=False)
         else:
-            # Для Grok 4.3 ловим и "Grok 4.3", и "Grok", и "Grok4.3"
             mask = df['Категория'].astype(str).str.contains(keywords, case=False, na=False, regex=True)
         
         filtered = df[mask]
         
         if filtered.empty:
-            st.info(f"📭 Пока нет заказов в этой категории")
+            st.info("📭 Пока нет заказов в этой категории")
         else:
             st.dataframe(
                 filtered,
@@ -185,15 +139,13 @@ def show_tab(tab_index, keywords):
                 hide_index=True
             )
 
-# Привязка вкладок
 show_tab(0, "Figma")
-show_tab(1, "Фото|Видео ИИ")
+show_tab(1, "Фото|Видео")
 show_tab(2, "Photoshop|Видео монтаж")
 show_tab(3, "Excel|PDF")
 show_tab(4, "WB|OZON")
-show_tab(5, "Grok")          # ← ловит "Grok 4.3", "Grok", "Grok4.3" и т.д.
-show_tab(6, "")              # Другие заказы
+show_tab(5, "Grok")           # ← ловит Grok 4.3, Grok и т.д.
+show_tab(6, "")
 
-# ==================== АВТООБНОВЛЕНИЕ ====================
 time.sleep(0.8)
 st.rerun()
