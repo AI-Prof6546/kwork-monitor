@@ -3,7 +3,6 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
-import time
 
 st.set_page_config(page_title="Kwork Монитор ИИ-заказов", page_icon="🤖", layout="wide")
 
@@ -12,9 +11,6 @@ st.markdown("""
 <style>
     .stApp { background: linear-gradient(135deg, #0a0c14 0%, #0e1117 100%); }
     .main-header { background: linear-gradient(90deg, #1a1f2e 0%, #252b3d 100%); padding: 24px 32px; border-radius: 20px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid #2a3142; }
-    .stDataFrame { border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); border: 1px solid #2a3142; }
-    .stTabs [data-baseweb="tab"] { background: #252b3d; border-radius: 12px; padding: 14px 24px; font-weight: 600; }
-    .stTabs [aria-selected="true"] { background: linear-gradient(90deg, #00ff9d 0%, #00cc7a 100%); color: #0a0c14 !important; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -29,12 +25,11 @@ st.markdown("""
 
 # ==================== НАСТРОЙКИ ====================
 SPREADSHEET_ID = "1V5wkNF8lYvz7FbRDEotmrmHB1zYrV2jAjU3WIcdD2bQ"
-JSON_KEY_PATH = "/home/workdir/attachments/kwork-monitor-c3d0d11aa435.json"   # ← поменяй путь, если нужно
 
 @st.cache_resource
 def get_gspread_client():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_file(JSON_KEY_PATH, scopes=scope)
+    creds_dict = dict(st.secrets["google_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict)
     return gspread.authorize(creds)
 
 def load_data():
@@ -47,13 +42,10 @@ def load_data():
             return pd.DataFrame(columns=['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'])
         
         df = pd.DataFrame(data[1:], columns=data[0])
-        
-        # Приводим к нужным колонкам
         expected_cols = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка']
         for col in expected_cols:
             if col not in df.columns:
                 df[col] = ""
-        
         df = df[expected_cols]
         df['Дата'] = pd.to_datetime(df['Дата'], errors='coerce')
         df = df.dropna(subset=['Заголовок'])
@@ -71,10 +63,8 @@ def show_dashboard():
     
     if 'last_df' not in st.session_state or len(df) >= len(st.session_state.last_df):
         st.session_state.last_df = df
-    
     df = st.session_state.last_df
     
-    # Метрики
     total = len(df)
     high = len(df[df['Приоритет'].astype(str).str.contains('💎|ВЫСОКИЙ', case=False, na=False)]) if not df.empty else 0
     today = len(df[df['Дата'].dt.date == datetime.now().date()]) if not df.empty else 0
@@ -88,27 +78,14 @@ def show_dashboard():
     st.caption(f"Последнее обновление: {datetime.now().strftime('%H:%M:%S')}")
     st.divider()
     
-    # Главная таблица
     st.subheader("📋 Все заказы (новые сверху)")
     if df.empty:
         st.info("📭 Данных пока нет...")
     else:
-        st.dataframe(
-            df,
-            use_container_width=True,
-            height=520,
-            column_config={
-                "Дата": st.column_config.DatetimeColumn("Дата", format="DD.MM HH:mm"),
-                "Заголовок": st.column_config.TextColumn(width=420),
-                "Описание": st.column_config.TextColumn(width=580),
-                "Ссылка": st.column_config.LinkColumn("Действие", display_text="🔗 Открыть заказ", width=140),
-            },
-            hide_index=True
-        )
+        st.dataframe(df, use_container_width=True, height=520, hide_index=True,
+                     column_config={"Ссылка": st.column_config.LinkColumn("Действие", display_text="🔗 Открыть заказ", width=140)})
     
     st.divider()
-    
-    # Вкладки
     st.subheader("📂 Заказы по направлениям")
     tabs = st.tabs(["🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop", "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие"])
     
