@@ -43,58 +43,45 @@ def load_data():
         df.columns = df.columns.str.strip()
         return df
     except:
-        return pd.DataFrame(columns=["Дата", "Приоритет", "Категория", "Заголовок", "Описание", "Предложений", "Ссылка"])
+        return pd.DataFrame(columns=["Дата", "Приоритет", "Категория", "Заголовок", "Бюджет", "Предложений", "Описание", "Ссылка"])
 
 df = load_data()
 
-# ==================== БЕЗОПАСНЫЕ МЕТРИКИ ====================
-def safe_count(col, pattern):
-    if df.empty or col not in df.columns:
-        return 0
-    try:
-        return len(df[df[col].astype(str).str.contains(pattern, na=False)])
-    except:
-        return 0
-
-total = len(df)
-high_priority = safe_count("Приоритет", "💎")
-today_count = safe_count("Дата", str(date.today()))
-
+# ==================== МЕТРИКИ ====================
 col1, col2, col3, col4 = st.columns(4)
 
-with col1:
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.metric("📦 Всего заказов", total)
-    st.markdown('</div>', unsafe_allow_html=True)
+total = len(df)
+high_priority = len(df[df.get("Приоритет", "").astype(str).str.contains("💎", na=False)]) if not df.empty else 0
+today_count = len(df[df.get("Дата", "").astype(str).str.contains(str(date.today()), na=False)]) if not df.empty else 0
 
-with col2:
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.metric("💎 Высокий приоритет", high_priority)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with col3:
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.metric("📅 Сегодня", today_count)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with col4:
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.metric("📥 Загружено строк", total)
-    st.markdown('</div>', unsafe_allow_html=True)
+col1.metric("📦 Всего заказов", total)
+col2.metric("💎 Высокий приоритет", high_priority)
+col3.metric("📅 Сегодня", today_count)
+col4.metric("📥 Загружено строк", len(df))
 
 st.divider()
 
-# ==================== ГЛАВНАЯ ТАБЛИЦА ====================
+# ==================== ГЛАВНАЯ ТАБЛИЦА (новые сверху) ====================
 st.subheader("📋 Все заказы")
+
 if df.empty:
     st.info("📭 Пока нет заказов. Первые данные появятся в течение 1–2 минут.")
 else:
+    # Сортируем — новые заказы сверху
+    if "Дата" in df.columns:
+        df["Дата"] = pd.to_datetime(df["Дата"], errors="coerce")
+        df = df.sort_values(by="Дата", ascending=False)
+
     st.dataframe(
         df,
         use_container_width=True,
-        height=480,
+        height=520,
         column_config={
-            "Ссылка": st.column_config.LinkColumn("Открыть", display_text="🔗 Открыть", width=130),
+            "Ссылка": st.column_config.LinkColumn(
+                "Открыть заказ",
+                display_text="🔗 Открыть",
+                width=130
+            ),
             "Заголовок": st.column_config.TextColumn(width=400),
             "Описание": st.column_config.TextColumn(width=600),
         },
@@ -105,7 +92,10 @@ st.divider()
 
 # ==================== ВКЛАДКИ ====================
 st.subheader("📂 Заказы по направлениям")
-tabs = st.tabs(["🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop/Видео монтаж", "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие заказы"])
+tabs = st.tabs([
+    "🎨 Figma", "🖼️ Фото/Видео ИИ", "📸 Photoshop/Видео монтаж",
+    "📊 Excel/PDF", "🛒 WB/OZON", "🤖 Grok 4.3", "📦 Другие заказы"
+])
 
 def show_tab(keyword):
     if df.empty:
