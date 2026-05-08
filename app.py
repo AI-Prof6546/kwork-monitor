@@ -62,7 +62,7 @@ def load_data():
         st.error(f"Ошибка: {e}")
         return pd.DataFrame()
 
-@st.fragment(run_every=10)
+@st.fragment(run_every=5)
 def show_dashboard():
     df = load_data()
     
