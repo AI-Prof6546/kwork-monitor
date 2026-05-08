@@ -3,7 +3,6 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
-import time
 
 st.set_page_config(page_title="Kwork Монитор ИИ-заказов", page_icon="🤖", layout="wide")
 
@@ -37,19 +36,33 @@ def load_data():
         client = get_gspread_client()
         sheet = client.open_by_key(SPREADSHEET_ID).sheet1
         data = sheet.get_all_values()
-        
+
         if len(data) < 2:
             return pd.DataFrame()
-        
+
+        # Берём заголовки из первой строки
         headers = [str(h).strip() for h in data[0]]
         df = pd.DataFrame(data[1:], columns=headers)
-        
+
+        # Приводим к нужным колонкам
+        col_rename = {
+            'Дата': 'Дата',
+            'Приоритет': 'Приоритет',
+            'Категория': 'Категория',
+            'Заголовок': 'Заголовок',
+            'Бюджет': 'Бюджет',
+            'Предложений': 'Предложений',
+            'Описание': 'Описание',
+            'Ссылка': 'Ссылка'
+        }
+        df = df.rename(columns=col_rename)
+
         needed = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка']
         for col in needed:
             if col not in df.columns:
                 df[col] = ""
+
         df = df[needed]
-        
         df['Дата'] = pd.to_datetime(df['Дата'], errors='coerce')
         df = df.dropna(subset=['Заголовок'])
         df = df[df['Заголовок'].astype(str).str.strip() != ""]
@@ -59,7 +72,7 @@ def load_data():
         st.error(f"Ошибка: {e}")
         return pd.DataFrame()
 
-@st.fragment(run_every=10)   # ← изменил с 2 на 10 секунд (решает проблему квоты)
+@st.fragment(run_every=10)
 def show_dashboard():
     df = load_data()
     
