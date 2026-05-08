@@ -40,29 +40,19 @@ def load_data():
         if len(data) < 2:
             return pd.DataFrame()
 
-        # Берём заголовки из первой строки
+        # Пропускаем первую строку, если она не заголовки
+        if "Дата" not in str(data[0]):
+            data = data[1:]
+
         headers = [str(h).strip() for h in data[0]]
         df = pd.DataFrame(data[1:], columns=headers)
-
-        # Приводим к нужным колонкам
-        col_rename = {
-            'Дата': 'Дата',
-            'Приоритет': 'Приоритет',
-            'Категория': 'Категория',
-            'Заголовок': 'Заголовок',
-            'Бюджет': 'Бюджет',
-            'Предложений': 'Предложений',
-            'Описание': 'Описание',
-            'Ссылка': 'Ссылка'
-        }
-        df = df.rename(columns=col_rename)
 
         needed = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка']
         for col in needed:
             if col not in df.columns:
                 df[col] = ""
-
         df = df[needed]
+
         df['Дата'] = pd.to_datetime(df['Дата'], errors='coerce')
         df = df.dropna(subset=['Заголовок'])
         df = df[df['Заголовок'].astype(str).str.strip() != ""]
