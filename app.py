@@ -11,6 +11,7 @@ st.markdown("""
 <style>
     .stApp { background: linear-gradient(135deg, #0a0c14 0%, #0e1117 100%); }
     .main-header { background: linear-gradient(90deg, #1a1f2e 0%, #252b3d 100%); padding: 24px 32px; border-radius: 20px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid #2a3142; }
+    .stDataFrame { border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); border: 1px solid #2a3142; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -29,7 +30,11 @@ SPREADSHEET_ID = "1V5wkNF8lYvz7FbRDEotmrmHB1zYrV2jAjU3WIcdD2bQ"
 @st.cache_resource
 def get_gspread_client():
     creds_dict = dict(st.secrets["google_service_account"])
-    creds = Credentials.from_service_account_info(creds_dict)
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds)
 
 def load_data():
@@ -82,8 +87,18 @@ def show_dashboard():
     if df.empty:
         st.info("📭 Данных пока нет...")
     else:
-        st.dataframe(df, use_container_width=True, height=520, hide_index=True,
-                     column_config={"Ссылка": st.column_config.LinkColumn("Действие", display_text="🔗 Открыть заказ", width=140)})
+        st.dataframe(
+            df,
+            use_container_width=True,
+            height=520,
+            hide_index=True,
+            column_config={
+                "Дата": st.column_config.DatetimeColumn("Дата", format="DD.MM HH:mm"),
+                "Заголовок": st.column_config.TextColumn(width=420),
+                "Описание": st.column_config.TextColumn(width=580),
+                "Ссылка": st.column_config.LinkColumn("Действие", display_text="🔗 Открыть заказ", width=140),
+            }
+        )
     
     st.divider()
     st.subheader("📂 Заказы по направлениям")
