@@ -35,39 +35,47 @@ st.markdown("""
 
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStd09qZjRsRPMB_mN0HgEB6dDL2UPAELc59_IxnFroSvWgR984VUcvzm3zn8dyhsP7Q5hk1iq9WXDS/pub?output=csv"
 
-@st.cache_data(ttl=2, show_spinner=False)
-def load_data():
-    try:
-        df = pd.read_csv(CSV_URL, on_bad_lines='skip', header=None)
-        
-        if df.empty:
-            return pd.DataFrame(columns=['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'])
-        
-        # Принудительно назначаем колонки по позиции (самый надёжный способ)
-        if len(df.columns) >= 8:
-            df.columns = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка']
-        else:
-            while len(df.columns) < 8:
-                df[len(df.columns)] = ""
-            df.columns = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'][:len(df.columns)]
-        
-        # Убираем строку заголовков, если она попала
-        if str(df.iloc[0, 0]).lower() in ['дата', 'date', 'время']:
-            df = df.iloc[1:].reset_index(drop=True)
-        
-        df['Дата'] = pd.to_datetime(df['Дата'], errors='coerce')
-        df = df.dropna(subset=['Заголовок'])
-        df = df[df['Заголовок'].astype(str).str.strip() != ""]
-        df = df.sort_values('Дата', ascending=False).reset_index(drop=True)
-        
-        return df
-    except Exception:
-        return pd.DataFrame(columns=['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'])
+def load_fresh_data():
+    """Принудительно загружает самые свежие данные (с повторными попытками)"""
+    for attempt in range(3):
+        try:
+            df = pd.read_csv(CSV_URL, on_bad_lines='skip', header=None)
+            
+            if len(df.columns) >= 8:
+                df.columns = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка']
+            else:
+                while len(df.columns) < 8:
+                    df[len(df.columns)] = ""
+                df.columns = ['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'][:len(df.columns)]
+            
+            if str(df.iloc[0, 0]).lower() in ['дата', 'date', 'время']:
+                df = df.iloc[1:].reset_index(drop=True)
+            
+            df['Дата'] = pd.to_datetime(df['Дата'], errors='coerce')
+            df = df.dropna(subset=['Заголовок'])
+            df = df[df['Заголовок'].astype(str).str.strip() != ""]
+            df = df.sort_values('Дата', ascending=False).reset_index(drop=True)
+            
+            return df
+        except:
+            time.sleep(0.3)
+    return pd.DataFrame(columns=['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Ссылка'])
 
-# ==================== ОСНОВНОЙ ФРАГМЕНТ (БЕЗ st.rerun — ТОЛЬКО fragment) ====================
+# ==================== УМНЫЙ ФРАГМЕНТ (никогда не теряет заказы) ====================
 @st.fragment(run_every=2)
 def show_dashboard():
-    df = load_data()
+    # Загружаем свежие данные
+    new_df = load_fresh_data()
+    
+    # Берём предыдущее состояние из session_state (чтобы никогда не показывать меньше)
+    if 'last_df' not in st.session_state:
+        st.session_state.last_df = new_df
+    
+    # Если новые данные хуже (меньше строк) — оставляем старые
+    if len(new_df) >= len(st.session_state.last_df):
+        st.session_state.last_df = new_df
+    
+    df = st.session_state.last_df
     
     # Метрики
     total = len(df)
@@ -115,7 +123,7 @@ def show_dashboard():
                 st.info("📭 Нет данных")
                 return
             
-            if tab_index == 6:  # Другие
+            if tab_index == 6:
                 mask = ~df['Категория'].astype(str).str.contains("Figma|Фото|Видео|Photoshop|Excel|WB|OZON|Grok", case=False, na=False)
             else:
                 mask = df['Категория'].astype(str).str.contains(keywords, case=False, na=False, regex=True)
@@ -143,7 +151,7 @@ def show_dashboard():
     show_tab(2, "Photoshop|Видео монтаж")
     show_tab(3, "Excel|PDF")
     show_tab(4, "WB|OZON")
-    show_tab(5, "Grok")           # ловит Grok 4.3 и все вариации
+    show_tab(5, "Grok")
     show_tab(6, "")
 
 # ==================== ЗАПУСК ====================
