@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ==================== ПРЕМИУМ ТЁМНАЯ ТЕМА ====================
+# ==================== ПРЕМИУМ ТЁМНАЯ ТЕМА (сохранена + улучшена стабильность) ====================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
@@ -151,199 +151,206 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ==================== ЗАГРУЗКА ДАННЫХ (максимально защищённая) ====================
+# ==================== УЛЬТРА-СТАБИЛЬНАЯ ЗАГРУЗКА ДАННЫХ ====================
 @st.cache_data(ttl=2, show_spinner=False)
 def load_data():
     try:
-        df = pd.read_csv(CSV_URL, on_bad_lines='skip', encoding='utf-8')
+        df = pd.read_csv(CSV_URL, on_bad_lines='skip', encoding='utf-8', header=None)
         df = df.dropna(how='all')
         
-        # Приводим названия колонок к единому виду (на случай разных версий)
-        column_mapping = {
-            'time': 'Время', 'timestamp': 'Время', 'date': 'Время',
-            'category': 'Категория', 'cat': 'Категория',
-            'priority': 'Приоритет', 'prio': 'Приоритет', 'color': 'Приоритет',
-            'title': 'Заголовок', 'name': 'Заголовок',
-            'description': 'Описание', 'desc': 'Описание',
-            'url': 'Ссылка', 'link': 'Ссылка', 'href': 'Ссылка',
-            'proposals': 'Предложений', 'offers': 'Предложений', 'count': 'Предложений'
-        }
+        if df.empty:
+            return pd.DataFrame(columns=['Время', 'Приоритет', 'Категория', 'Заголовок', 'Описание', 'Предложений', 'Ссылка'])
         
-        for old, new in column_mapping.items():
-            if old in df.columns and new not in df.columns:
-                df = df.rename(columns={old: new})
+        # === УМНОЕ ОПРЕДЕЛЕНИЕ КОЛОНОК (работает даже без заголовков) ===
+        if len(df.columns) >= 7:
+            # Предполагаем порядок из Google Таблицы: Время | Приоритет | Категория | Заголовок | Описание | Предложений | Ссылка
+            df.columns = ['Время', 'Приоритет', 'Категория', 'Заголовок', 'Описание', 'Предложений', 'Ссылка'][:len(df.columns)]
+        else:
+            # Если меньше колонок — заполняем недостающие
+            while len(df.columns) < 7:
+                df[len(df.columns)] = ""
+            df.columns = ['Время', 'Приоритет', 'Категория', 'Заголовок', 'Описание', 'Предложений', 'Ссылка']
         
-        # Создаём отсутствующие колонки
-        required = ['Время', 'Категория', 'Приоритет', 'Заголовок', 'Описание', 'Ссылка', 'Предложений']
-        for col in required:
-            if col not in df.columns:
-                df[col] = ""
-        
-        # Очистка
-        df['Время'] = pd.to_datetime(df['Время'], errors='coerce')
-        df['Предложений'] = pd.to_numeric(df['Предложений'], errors='coerce').fillna(0).astype(int)
+        # Очистка и приведение типов
         df = df.fillna("")
+        df['Время'] = pd.to_datetime(df['Время'], errors='coerce', infer_datetime_format=True)
+        df['Предложений'] = pd.to_numeric(df['Предложений'], errors='coerce').fillna(0).astype(int)
         
+        # Убираем полностью пустые строки
+        df = df.dropna(subset=['Заголовок'], how='all')
+        df = df[df['Заголовок'].astype(str).str.strip() != ""]
+        
+        df = df.reset_index(drop=True)
         return df
-    except Exception:
-        return pd.DataFrame(columns=['Время', 'Категория', 'Приоритет', 'Заголовок', 'Описание', 'Ссылка', 'Предложений'])
+        
+    except Exception as e:
+        # В случае любой ошибки возвращаем пустой безопасный датафрейм
+        return pd.DataFrame(columns=['Время', 'Приоритет', 'Категория', 'Заголовок', 'Описание', 'Предложений', 'Ссылка'])
 
-# ==================== ОСНОВНОЙ ФРАГМЕНТ (обновление без мерцания) ====================
+# ==================== ОСНОВНОЙ ФРАГМЕНТ (максимальная защита) ====================
 @st.fragment(run_every=2)
 def show_dashboard():
-    df = load_data()
-    
-    if df.empty or len(df) == 0:
-        st.warning("📭 Таблица пока пуста. Первые заказы появятся в течение минуты.", icon="⏳")
-        st.info("🔄 Страница автоматически обновляется каждые 2 секунды")
-        return
-    
-    # ==================== 4 МЕТРИКИ ====================
-    col1, col2, col3, col4 = st.columns(4, gap="medium")
-    
-    total = len(df)
-    high_priority = len(df[df['Приоритет'].astype(str).str.contains('💎|ВЫСОКИЙ|high', case=False, na=False)])
-    
-    today = date.today()
-    df['Время'] = pd.to_datetime(df['Время'], errors='coerce')
-    today_count = int((df['Время'].dt.date == today).sum()) if not df['Время'].isna().all() else 0
-    
-    with col1:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.metric("📦 Всего заказов", f"{total:,}", delta=f"+{total - 5}" if total > 5 else None)
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.metric("💎 Высокий приоритет", high_priority, delta_color="normal")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.metric("📅 Сегодня", today_count)
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col4:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.metric("📥 Загружено строк", f"{total:,}")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="premium-divider"></div>', unsafe_allow_html=True)
-    
-    # ==================== ПОИСК ====================
-    search_query = st.text_input(
-        "🔍 Поиск по всем заказам",
-        placeholder="Введите часть заголовка, описания или категории...",
-        key="global_search",
-        label_visibility="collapsed"
-    )
-    
-    if search_query:
-        mask = (
-            df['Заголовок'].astype(str).str.contains(search_query, case=False, na=False) |
-            df['Описание'].astype(str).str.contains(search_query, case=False, na=False) |
-            df['Категория'].astype(str).str.contains(search_query, case=False, na=False)
-        )
-        filtered_df = df[mask].copy()
-    else:
-        filtered_df = df.copy()
-    
-    # ==================== ГЛАВНАЯ ТАБЛИЦА ====================
-    st.markdown('<div class="section-title">📋 Все заказы <span style="font-size:14px; color:#5a6278;">(всегда видна • занимает почти весь экран)</span></div>', unsafe_allow_html=True)
-    
-    display_df = filtered_df[['Время', 'Категория', 'Приоритет', 'Заголовок', 'Описание', 'Предложений', 'Ссылка']].copy()
-    
-    # Красивый формат времени
-    display_df['Время'] = display_df['Время'].dt.strftime('%d.%m.%Y %H:%M')
-    
-    column_config = {
-        "Время": st.column_config.DatetimeColumn(
-            "Время",
-            format="DD.MM.YY HH:mm",
-            width="small"
-        ),
-        "Категория": st.column_config.TextColumn("Категория", width="small"),
-        "Приоритет": st.column_config.TextColumn("Приоритет", width="small"),
-        "Заголовок": st.column_config.TextColumn("Заголовок", width="large"),
-        "Описание": st.column_config.TextColumn("Описание", width="large"),
-        "Предложений": st.column_config.NumberColumn("Предложений", format="%d", width="small"),
-        "Ссылка": st.column_config.LinkColumn(
-            "Действие",
-            help="Открыть заказ на Kwork.ru",
-            display_text="🔗 Открыть заказ",
-            width="small"
-        )
-    }
-    
-    # Подсветка высокого приоритета (зелёный фон)
-    def highlight_high_priority(row):
-        if '💎' in str(row.get('Приоритет', '')) or 'ВЫСОКИЙ' in str(row.get('Приоритет', '')).upper():
-            return pd.Series(['background-color: #0d3b2e; color: #00ff9d; font-weight: 500'] * len(row), index=row.index)
-        return pd.Series([''] * len(row), index=row.index)
-    
     try:
-        styled_df = display_df.style.apply(highlight_high_priority, axis=1)
-        st.dataframe(
-            styled_df,
-            use_container_width=True,
-            height=520,
-            column_config=column_config,
-            hide_index=True
+        df = load_data()
+        
+        # === ЗАЩИТА ОТ ПУСТОЙ ТАБЛИЦЫ ===
+        if df.empty or len(df) == 0:
+            st.warning("📭 Таблица пока пуста или данные ещё не загрузились. Первые заказы появятся в течение 1–2 минут.", icon="⏳")
+            st.info("🔄 Страница автоматически обновляется каждые 2 секунды • Данные берутся из Google Sheets")
+            return
+        
+        # === 4 МЕТРИКИ (в красивых карточках) ===
+        total = len(df)
+        high_priority = len(df[df['Приоритет'].astype(str).str.contains('💎|ВЫСОКИЙ|high', case=False, na=False)])
+        
+        today = date.today()
+        df['Время'] = pd.to_datetime(df['Время'], errors='coerce')
+        today_count = int((df['Время'].dt.date == today).sum()) if df['Время'].notna().any() else 0
+        
+        col1, col2, col3, col4 = st.columns(4, gap="medium")
+        
+        with col1:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.metric("📦 Всего заказов", f"{total:,}", delta=f"+{total - 5}" if total > 5 else None)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.metric("💎 Высокий приоритет", high_priority)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.metric("📅 Сегодня", today_count)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col4:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.metric("📥 Загружено строк", f"{total:,}")
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('<div class="premium-divider"></div>', unsafe_allow_html=True)
+        
+        # === ПОИСК (удобный и быстрый) ===
+        search_query = st.text_input(
+            "🔍 Поиск по всем заказам",
+            placeholder="Введите часть заголовка, описания или категории...",
+            key="global_search_v2",
+            label_visibility="collapsed"
         )
-    except:
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            height=520,
-            column_config=column_config,
-            hide_index=True
-        )
-    
-    # ==================== ВКЛАДКИ ПО НАПРАВЛЕНИЯМ ====================
-    st.markdown('<div class="premium-divider"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">📂 Заказы по направлениям</div>', unsafe_allow_html=True)
-    
-    tab_names = [
-        "🎨 Figma",
-        "🖼️ Фото/Видео ИИ",
-        "📸 Photoshop/Видео монтаж",
-        "📊 Excel/PDF",
-        "🛒 WB/OZON",
-        "🤖 Grok 4.3",
-        "📦 Другие заказы"
-    ]
-    
-    tabs = st.tabs(tab_names)
-    
-    for i, tab in enumerate(tabs):
-        with tab:
-            cat_name = tab_names[i].split(" ", 1)[1]
+        
+        if search_query:
+            mask = (
+                df['Заголовок'].astype(str).str.contains(search_query, case=False, na=False) |
+                df['Описание'].astype(str).str.contains(search_query, case=False, na=False) |
+                df['Категория'].astype(str).str.contains(search_query, case=False, na=False)
+            )
+            filtered_df = df[mask].copy()
+        else:
+            filtered_df = df.copy()
+        
+        # === ГЛАВНАЯ ТАБЛИЦА (всегда видна, занимает почти весь экран) ===
+        st.markdown('<div class="section-title">📋 Все заказы <span style="font-size:14px; color:#5a6278;">(всегда видна • занимает почти весь экран)</span></div>', unsafe_allow_html=True)
+        
+        display_df = filtered_df[['Время', 'Категория', 'Приоритет', 'Заголовок', 'Описание', 'Предложений', 'Ссылка']].copy()
+        
+        # Безопасное форматирование даты
+        display_df['Время'] = display_df['Время'].dt.strftime('%d.%m.%Y %H:%M').fillna("—")
+        
+        column_config = {
+            "Время": st.column_config.TextColumn("Время", width="small"),
+            "Категория": st.column_config.TextColumn("Категория", width="small"),
+            "Приоритет": st.column_config.TextColumn("Приоритет", width="small"),
+            "Заголовок": st.column_config.TextColumn("Заголовок", width="large"),
+            "Описание": st.column_config.TextColumn("Описание", width="large"),
+            "Предложений": st.column_config.NumberColumn("Предложений", format="%d", width="small"),
+            "Ссылка": st.column_config.LinkColumn(
+                "Действие",
+                help="Открыть заказ на Kwork.ru",
+                display_text="🔗 Открыть заказ",
+                width="small"
+            )
+        }
+        
+        # === Красивая подсветка высокого приоритета (зелёный фон) ===
+        try:
+            def highlight_high_priority(row):
+                prio = str(row.get('Приоритет', ''))
+                if '💎' in prio or 'ВЫСОКИЙ' in prio.upper():
+                    return pd.Series(['background-color: #0d3b2e; color: #00ff9d; font-weight: 600'] * len(row), index=row.index)
+                return pd.Series([''] * len(row), index=row.index)
             
-            # Гибкий поиск категории
-            if "Другие" in cat_name:
-                mask = ~df['Категория'].astype(str).str.contains(
-                    "Figma|Фото|Видео|Photoshop|Excel|WB|OZON|Grok", case=False, na=False
-                )
-            else:
-                keywords = cat_name.split("/")
-                mask = df['Категория'].astype(str).str.contains(keywords[0], case=False, na=False)
-            
-            tab_df = df[mask].copy()
-            
-            if tab_df.empty:
-                st.info(f"📭 В категории «{cat_name}» пока нет заказов", icon="😴")
-            else:
-                tab_display = tab_df[['Время', 'Категория', 'Приоритет', 'Заголовок', 'Описание', 'Предложений', 'Ссылка']].copy()
-                tab_display['Время'] = tab_display['Время'].dt.strftime('%d.%m %H:%M')
+            styled_df = display_df.style.apply(highlight_high_priority, axis=1)
+            st.dataframe(
+                styled_df,
+                use_container_width=True,
+                height=520,
+                column_config=column_config,
+                hide_index=True
+            )
+        except:
+            # Если стиль не сработал — показываем обычную таблицу (никогда не падает)
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                height=520,
+                column_config=column_config,
+                hide_index=True
+            )
+        
+        # === ВКЛАДКИ ПО НАПРАВЛЕНИЯМ (стабильные) ===
+        st.markdown('<div class="premium-divider"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">📂 Заказы по направлениям</div>', unsafe_allow_html=True)
+        
+        tab_names = [
+            "🎨 Figma",
+            "🖼️ Фото/Видео ИИ",
+            "📸 Photoshop/Видео монтаж",
+            "📊 Excel/PDF",
+            "🛒 WB/OZON",
+            "🤖 Grok 4.3",
+            "📦 Другие заказы"
+        ]
+        
+        tabs = st.tabs(tab_names)
+        
+        for i, tab in enumerate(tabs):
+            with tab:
+                cat_name = tab_names[i].split(" ", 1)[1]
                 
-                st.dataframe(
-                    tab_display,
-                    use_container_width=True,
-                    height=280,
-                    column_config=column_config,
-                    hide_index=True
-                )
-                st.caption(f"Всего в категории: **{len(tab_df)}** заказов • Высокий приоритет: **{len(tab_df[tab_df['Приоритет'].astype(str).str.contains('💎', na=False)])}**")
+                if "Другие" in cat_name:
+                    mask = ~df['Категория'].astype(str).str.contains(
+                        "Figma|Фото|Видео|Photoshop|Excel|WB|OZON|Grok", case=False, na=False
+                    )
+                else:
+                    keywords = cat_name.split("/")
+                    mask = df['Категория'].astype(str).str.contains(keywords[0], case=False, na=False)
+                
+                tab_df = df[mask].copy()
+                
+                if tab_df.empty:
+                    st.info(f"📭 В категории «{cat_name}» пока нет заказов", icon="😴")
+                else:
+                    tab_display = tab_df[['Время', 'Категория', 'Приоритет', 'Заголовок', 'Описание', 'Предложений', 'Ссылка']].copy()
+                    tab_display['Время'] = tab_display['Время'].dt.strftime('%d.%m %H:%M').fillna("—")
+                    
+                    st.dataframe(
+                        tab_display,
+                        use_container_width=True,
+                        height=280,
+                        column_config=column_config,
+                        hide_index=True
+                    )
+                    high_in_tab = len(tab_df[tab_df['Приоритет'].astype(str).str.contains('💎|ВЫСОКИЙ', case=False, na=False)])
+                    st.caption(f"Всего в категории: **{len(tab_df)}** • Высокий приоритет: **{high_in_tab}**")
+    
+    except Exception as e:
+        # === ГЛОБАЛЬНАЯ ЗАЩИТА — дашборд никогда не падает ===
+        st.error(f"⚠️ Временная ошибка отображения: {str(e)[:150]}")
+        st.info("🔄 Данные обновятся автоматически через 2 секунды. Если ошибка повторяется — обновите страницу (F5).")
+        # Показываем минимальную таблицу, чтобы интерфейс не сломался
+        st.dataframe(pd.DataFrame(columns=['Время', 'Категория', 'Приоритет', 'Заголовок', 'Описание', 'Предложений', 'Ссылка']), 
+                     use_container_width=True, height=200)
 
 # ==================== ЗАПУСК ====================
 show_dashboard()
@@ -352,6 +359,6 @@ show_dashboard()
 st.markdown("""
 <div class="footer">
     🤖 Kwork Monitor v64 • Streamlit 2026 • Данные обновляются автоматически из Google Sheets<br>
-    <span style="font-size:10px;">Защита от ошибок: включена • Кликабельные ссылки • Тёмная премиум-тема</span>
+    <span style="font-size:10px;">Полная защита от ошибок • Кликабельные ссылки • Премиум тёмная тема • Работает даже при пустой таблице</span>
 </div>
 """, unsafe_allow_html=True)
