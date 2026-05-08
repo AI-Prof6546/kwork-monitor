@@ -6,12 +6,12 @@ from datetime import datetime
 
 st.set_page_config(page_title="Kwork Монитор ИИ-заказов", page_icon="🤖", layout="wide")
 
-# ==================== ПРЕМИУМ ТЁМНАЯ ТЕМА ====================
 st.markdown("""
 <style>
     .stApp { background: linear-gradient(135deg, #0a0c14 0%, #0e1117 100%); }
     .main-header { background: linear-gradient(90deg, #1a1f2e 0%, #252b3d 100%); padding: 24px 32px; border-radius: 20px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid #2a3142; }
     .stDataFrame { border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.45); border: 1px solid #2a3142; }
+    a { text-decoration: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -58,6 +58,11 @@ def load_data():
         df = df.dropna(subset=['Заголовок'])
         df = df[df['Заголовок'].astype(str).str.strip() != ""]
         df = df.sort_values('Дата', ascending=False).reset_index(drop=True)
+
+        # Создаём красивую кнопку-ссылку
+        df['Действие'] = df['Ссылка'].apply(
+            lambda x: f'<a href="{x}" target="_blank" style="color:#00ff9d; text-decoration:none; font-weight:600;">🔗 Открыть заказ</a>'
+        )
         return df
     except Exception as e:
         st.error(f"Ошибка: {e}")
@@ -89,8 +94,9 @@ def show_dashboard():
     if df.empty:
         st.info("📭 Данных пока нет...")
     else:
+        display_df = df[['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Действие']].copy()
         st.dataframe(
-            df,
+            display_df,
             use_container_width=True,
             height=520,
             hide_index=True,
@@ -98,12 +104,7 @@ def show_dashboard():
                 "Дата": st.column_config.DatetimeColumn("Дата", format="DD.MM HH:mm"),
                 "Заголовок": st.column_config.TextColumn(width=380),
                 "Описание": st.column_config.TextColumn(width=520),
-                "Ссылка": st.column_config.LinkColumn(
-                    "Действие",
-                    display_text="🔗 Открыть заказ",
-                    width=150,
-                    help="Нажми, чтобы открыть заказ на Kwork"
-                ),
+                "Действие": st.column_config.HtmlColumn("Действие", width=150),
             }
         )
 
@@ -126,18 +127,14 @@ def show_dashboard():
             if filtered.empty:
                 st.info("Пока нет заказов в этой категории")
             else:
+                display_filtered = filtered[['Дата', 'Приоритет', 'Категория', 'Заголовок', 'Бюджет', 'Предложений', 'Описание', 'Действие']].copy()
                 st.dataframe(
-                    filtered,
+                    display_filtered,
                     use_container_width=True,
                     height=320,
                     hide_index=True,
                     column_config={
-                        "Ссылка": st.column_config.LinkColumn(
-                            "Действие",
-                            display_text="🔗 Открыть заказ",
-                            width=140,
-                            help="Открыть заказ"
-                        ),
+                        "Действие": st.column_config.HtmlColumn("Действие", width=140),
                     }
                 )
 
