@@ -17,7 +17,7 @@ st.markdown("""
 <div class="main-header">
     <h1 style="margin:0; font-size:42px; font-weight:800; color:white;">🤖 Kwork Монитор ИИ-заказов</h1>
     <p style="margin:8px 0 0 0; font-size:18px; color:#00ff9d; font-weight:600;">
-        🔥 Реальное время • Обновление каждые 5 секунд
+        🔥 Реальное время 
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -61,7 +61,7 @@ def load_data():
         st.error(f"Ошибка: {e}")
         return pd.DataFrame()
 
-@st.fragment(run_every=5)
+@st.fragment(run_every=2)
 def show_dashboard():
     df = load_data()
     
